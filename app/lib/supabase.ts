@@ -1,19 +1,52 @@
 import { createClient } from '@supabase/supabase-js';
 
-// Get Supabase URL and anonymous key from environment variables
-// These will be configured in Cloudflare environment variables
+/**
+ * Cloudflare Workers Context - This global is populated by the Cloudflare Workers runtime
+ * when supabase.ts is imported from a Workers environment
+ */
+declare global {
+  // Add our context object that gets passed from app.ts
+  var __CLOUDFLARE_CONTEXT__: {
+    env: {
+      SUPABASE_URL: string;
+      SUPABASE_ANON_KEY: string;
+    }
+  } | undefined;
+}
+
+// Get Supabase URL and anonymous key from the appropriate environment
 let supabaseUrl = '';
 let supabaseAnonKey = '';
 
-// Check if we're in a browser environment
+// Determine the execution environment and get the appropriate variables
 if (typeof window !== 'undefined') {
-  // In client-side code, access from window.__ENV__ (populated in root.tsx)
+  // BROWSER: Using window.__ENV__ which is populated in root.tsx
   supabaseUrl = (window as any).__ENV__?.SUPABASE_URL || '';
   supabaseAnonKey = (window as any).__ENV__?.SUPABASE_ANON_KEY || '';
+} else if (global.__CLOUDFLARE_CONTEXT__) {
+  // CLOUDFLARE WORKERS: Using the Cloudflare Workers context
+  supabaseUrl = global.__CLOUDFLARE_CONTEXT__.env.SUPABASE_URL;
+  supabaseAnonKey = global.__CLOUDFLARE_CONTEXT__.env.SUPABASE_ANON_KEY;
 } else {
-  // In server environments, access directly from process or env
-  supabaseUrl = process.env.SUPABASE_URL || '';
-  supabaseAnonKey = process.env.SUPABASE_ANON_KEY || '';
+  // Fallback for other environments - this could be Node.js, Deno, etc.
+  try {
+    // Use import.meta.env for Vite-like environments
+    if (typeof import.meta !== 'undefined' && import.meta.env) {
+      const importMeta = import.meta as any;
+      if (importMeta.env && importMeta.env.SUPABASE_URL && importMeta.env.SUPABASE_ANON_KEY) {
+        supabaseUrl = importMeta.env.SUPABASE_URL;
+        supabaseAnonKey = importMeta.env.SUPABASE_ANON_KEY;
+      }
+    }
+  } catch (e) {
+    // Ignore any errors accessing import.meta
+  }
+  
+  // Final fallback to process.env for Node.js-like environments
+  if (!supabaseUrl && typeof process !== 'undefined' && process.env) {
+    supabaseUrl = process.env.SUPABASE_URL || '';
+    supabaseAnonKey = process.env.SUPABASE_ANON_KEY || '';
+  }
 }
 
 // Initialize the Supabase client
